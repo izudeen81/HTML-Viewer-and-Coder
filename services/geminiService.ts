@@ -2,17 +2,16 @@ import { GoogleGenAI } from "@google/genai";
 
 const API_KEY = process.env.API_KEY;
 
-// Fail early if the API key is not configured.
-if (!API_KEY) {
-    throw new Error("API_KEY environment variable not set");
-}
+// NOTE: We no longer throw an error here to allow the UI to load
+// even if the API key isn't set on static deployment platforms.
+// The check is moved into the function that uses the key.
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 /**
  * Defines the types of errors that can be specifically handled from the Gemini service.
  * - `SAFETY`: The response was blocked by content safety filters.
- * - `API_KEY`: The provided API key is invalid.
+ * - `API_KEY`: The provided API key is invalid or missing.
  * - `NETWORK`: A network error occurred while contacting the API.
  * - `UNKNOWN`: A generic or unexpected error occurred.
  */
@@ -45,6 +44,14 @@ export class GeminiError extends Error {
  * @throws {GeminiError} Throws a custom GeminiError for specific, handleable error cases.
  */
 export async function editHtmlCode(html: string, prompt: string): Promise<string> {
+    // Check for the API key here, right before we need it.
+    if (!API_KEY) {
+        throw new GeminiError(
+            'The Gemini API key is not configured. Please set it up to use this feature.',
+            'API_KEY'
+        );
+    }
+    
     // Construct a detailed prompt to guide the Gemini model.
     // This structured prompt ensures the model understands its role and the expected output format.
     const fullPrompt = `
