@@ -1,0 +1,5 @@
+{
+  "name": "Gemini HTML Editor",
+  "description": "An interactive HTML editor that uses Gemini to suggest and apply code modifications based on user prompts. See a live preview of your changes instantly.",
+  "requestFramePermissions": []
+}
