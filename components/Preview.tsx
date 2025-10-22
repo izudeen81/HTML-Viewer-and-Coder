@@ -5,12 +5,14 @@ import React, { useRef, useEffect } from 'react';
  * @interface PreviewProps
  * @property {string} htmlCode - The HTML string to be rendered.
  * @property {boolean} isWysiwygEnabled - Flag to enable or disable live editing.
+ * @property {boolean} isInspectorEnabled - Flag to enable or disable element inspection.
  * @property {(newBodyHtml: string) => void} onWysiwygChange - Callback to sync content changes back to the parent.
  * @property {(elementHtml: string) => void} onElementSelect - Callback to notify parent of element selection.
  */
 interface PreviewProps {
   htmlCode: string;
   isWysiwygEnabled: boolean;
+  isInspectorEnabled: boolean;
   onWysiwygChange: (newBodyHtml: string) => void;
   onElementSelect: (elementHtml: string) => void;
 }
@@ -22,7 +24,7 @@ interface PreviewProps {
  * @param {PreviewProps} props - The props for the Preview component.
  * @returns {React.FC<PreviewProps>} An iframe element that displays the rendered HTML.
  */
-const Preview: React.FC<PreviewProps> = ({ htmlCode, isWysiwygEnabled, onWysiwygChange, onElementSelect }) => {
+const Preview: React.FC<PreviewProps> = ({ htmlCode, isWysiwygEnabled, isInspectorEnabled, onWysiwygChange, onElementSelect }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const isMounted = useRef(false);
 
@@ -38,6 +40,7 @@ const Preview: React.FC<PreviewProps> = ({ htmlCode, isWysiwygEnabled, onWysiwyg
         if (!doc?.body) return;
 
         // --- Clear all previous listeners and styles to prevent conflicts ---
+        doc.body.contentEditable = 'false'; // Set to false by default
         doc.body.onclick = null;
         doc.body.oninput = null;
         doc.getElementById('gemini-inspector-style')?.remove();
@@ -47,7 +50,7 @@ const Preview: React.FC<PreviewProps> = ({ htmlCode, isWysiwygEnabled, onWysiwyg
             doc.body.oninput = () => {
                 if (doc.body) onWysiwygChange(doc.body.innerHTML);
             };
-        } else {
+        } else if (isInspectorEnabled) {
             // --- Setup Inspector Mode ---
             doc.body.contentEditable = 'false';
             
@@ -112,7 +115,7 @@ const Preview: React.FC<PreviewProps> = ({ htmlCode, isWysiwygEnabled, onWysiwyg
         // Always ensure the event listeners are up-to-date with the current mode.
         setupEventListeners();
     }
-  }, [htmlCode, isWysiwygEnabled, onWysiwygChange, onElementSelect]);
+  }, [htmlCode, isWysiwygEnabled, isInspectorEnabled, onWysiwygChange, onElementSelect]);
 
   return (
     <iframe

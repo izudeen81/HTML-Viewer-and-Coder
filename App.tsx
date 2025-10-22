@@ -6,7 +6,7 @@ import GeminiControls from './components/GeminiControls';
 import { editHtmlCode, GeminiError } from './services/geminiService';
 import type { GeminiErrorType } from './services/geminiService';
 import { INITIAL_HTML } from './constants';
-import { LogoIcon, ExpandIcon, CollapseIcon, RetryIcon, SunIcon, MoonIcon, PencilIcon } from './components/Icons';
+import { LogoIcon, ExpandIcon, CollapseIcon, RetryIcon, SunIcon, MoonIcon, PencilIcon, InspectIcon } from './components/Icons';
 
 /**
  * The main application component. It orchestrates the entire UI, including
@@ -22,6 +22,7 @@ const App: React.FC = () => {
   const [isPreviewFullScreen, setIsPreviewFullScreen] = useState<boolean>(false);
   const [theme, setTheme] = useState('dark');
   const [isWysiwygEnabled, setIsWysiwygEnabled] = useState<boolean>(false);
+  const [isInspectorEnabled, setIsInspectorEnabled] = useState<boolean>(false);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
 
   useEffect(() => {
@@ -107,7 +108,24 @@ const App: React.FC = () => {
   }, []);
 
   const toggleWysiwyg = useCallback(() => {
-    setIsWysiwygEnabled(prev => !prev);
+    setIsWysiwygEnabled(prev => {
+        const newState = !prev;
+        if (newState) {
+            setIsInspectorEnabled(false);
+        }
+        return newState;
+    });
+    setSelectedCode(null);
+  }, []);
+
+  const toggleInspector = useCallback(() => {
+    setIsInspectorEnabled(prev => {
+        const newState = !prev;
+        if (newState) {
+            setIsWysiwygEnabled(false);
+        }
+        return newState;
+    });
     setSelectedCode(null);
   }, []);
 
@@ -238,6 +256,19 @@ const App: React.FC = () => {
             <h2 className="font-semibold text-gray-900 dark:text-header-text">Live Preview</h2>
             <div className="flex items-center gap-2">
                 <button
+                    onClick={toggleInspector}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-sm transition-colors ${
+                        isInspectorEnabled
+                        ? 'bg-tm-blue text-white hover:bg-blue-700'
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-light-text hover:bg-gray-300 dark:hover:bg-gray-600'
+                    }`}
+                    aria-label={isInspectorEnabled ? "Disable inspect mode" : "Enable inspect mode"}
+                    title={isInspectorEnabled ? "Disable inspect mode" : "Enable inspect mode"}
+                >
+                    <InspectIcon />
+                    <span>Inspect</span>
+                </button>
+                <button
                     onClick={toggleWysiwyg}
                     className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-sm transition-colors ${
                         isWysiwygEnabled
@@ -262,6 +293,7 @@ const App: React.FC = () => {
           <Preview 
             htmlCode={htmlCode} 
             isWysiwygEnabled={isWysiwygEnabled}
+            isInspectorEnabled={isInspectorEnabled}
             onWysiwygChange={handleWysiwygChange}
             onElementSelect={handleElementSelect}
           />
