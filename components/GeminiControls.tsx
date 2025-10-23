@@ -9,6 +9,8 @@ import { MagicWandIcon, SpinnerIcon, UndoIcon } from './Icons';
  * @property {boolean} isLoading - Flag indicating whether an API call is in progress.
  * @property {boolean} canUndo - Flag indicating if there is a previous state to undo to.
  * @property {() => void} onUndo - Callback function to trigger an undo action.
+ * @property {string} honeypotValue - The value of the honeypot field for spam prevention.
+ * @property {(value: string) => void} onHoneypotChange - Callback to update the honeypot field's value.
  */
 interface GeminiControlsProps {
   prompt: string;
@@ -17,6 +19,8 @@ interface GeminiControlsProps {
   isLoading: boolean;
   canUndo: boolean;
   onUndo: () => void;
+  honeypotValue: string;
+  onHoneypotChange: (value: string) => void;
 }
 
 /**
@@ -32,6 +36,8 @@ const GeminiControls: React.FC<GeminiControlsProps> = ({
   isLoading,
   canUndo,
   onUndo,
+  honeypotValue,
+  onHoneypotChange,
 }) => {
   /**
    * Handles the 'keydown' event on the input field, submitting the form on 'Enter'.
@@ -59,6 +65,18 @@ const GeminiControls: React.FC<GeminiControlsProps> = ({
           className="flex-grow bg-gray-50 dark:bg-[#0a192f] border border-gray-300 dark:border-border-color rounded-md px-3 py-2 text-gray-900 dark:text-light-text focus:outline-none focus:ring-2 focus:ring-tm-orange"
           disabled={isLoading}
         />
+        {/* Honeypot field for bot prevention. It is visually hidden. */}
+        <div style={{ position: 'absolute', left: '-5000px' }} aria-hidden="true">
+          <label htmlFor="honeypot-input">Do not fill this out</label>
+          <input
+            id="honeypot-input"
+            type="text"
+            value={honeypotValue}
+            onChange={(e) => onHoneypotChange(e.target.value)}
+            tabIndex={-1}
+            autoComplete="off"
+          />
+        </div>
         <button
           onClick={onUndo}
           disabled={!canUndo || isLoading}

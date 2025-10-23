@@ -1,12 +1,19 @@
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import CodeEditor from './components/CodeEditor';
 import Preview from './components/Preview';
 import GeminiControls from './components/GeminiControls';
-import { editHtmlCode, GeminiError } from './services/geminiService';
-import type { GeminiErrorType } from './services/geminiService';
+import ApiKeyModal from './components/ApiKeyModal';
+import { editHtmlCode, GeminiError } from './lib/gemini';
+import type { GeminiErrorType } from './lib/gemini';
 import { INITIAL_HTML } from './constants';
-import { LogoIcon, ExpandIcon, CollapseIcon, RetryIcon, SunIcon, MoonIcon, PencilIcon, InspectIcon } from './components/Icons';
+import { LogoIcon, ExpandIcon, CollapseIcon, RetryIcon, SunIcon, MoonIcon, PencilIcon, InspectIcon, KeyIcon } from './components/Icons';
+import { useTheme } from './hooks/useTheme';
+import { usePersistentStringState } from './hooks/usePersistentStringState';
+import { useResizablePanes } from './hooks/useResizablePanes';
+import { useApiKey } from './hooks/useApiKey';
+
+
+const MIN_SUBMIT_TIME_MS = 2000; // 2 seconds
 
 /**
  * The main application component. It orchestrates the entire UI, including
@@ -14,43 +21,50 @@ import { LogoIcon, ExpandIcon, CollapseIcon, RetryIcon, SunIcon, MoonIcon, Penci
  * @returns {React.FC} The rendered application component.
  */
 const App: React.FC = () => {
-  const [htmlCode, setHtmlCode] = useState<string>(INITIAL_HTML);
+  const [theme, toggleTheme] = useTheme();
+  const [htmlCode, setHtmlCode] = usePersistentStringState('gemini-html-editor-code', INITIAL_HTML);
+  const { editorPaneRef, handleResizeMouseDown } = useResizablePanes();
+  const [apiKey, setApiKey] = useApiKey();
+  
   const [previousHtmlCode, setPreviousHtmlCode] = useState<string | null>(null);
   const [editPrompt, setEditPrompt] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<{ message: string; type: GeminiErrorType } | null>(null);
   const [isPreviewFullScreen, setIsPreviewFullScreen] = useState<boolean>(false);
-  const [theme, setTheme] = useState('dark');
   const [isWysiwygEnabled, setIsWysiwygEnabled] = useState<boolean>(false);
   const [isInspectorEnabled, setIsInspectorEnabled] = useState<boolean>(false);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const [honeypot, setHoneypot] = useState<string>('');
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState<boolean>(false);
+  const formLoadTime = useRef(Date.now());
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (savedTheme && ['light', 'dark'].includes(savedTheme)) {
-      setTheme(savedTheme);
-    } else if (prefersDark) {
-      setTheme('dark');
-    } else {
-      setTheme('light');
-    }
-  }, []);
-
-  useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
-  };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isPreviewFullScreen) {
+        setIsPreviewFullScreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isPreviewFullScreen]);
 
   const handleSubmit = useCallback(async () => {
+    // Anti-spam: Honeypot check
+    if (honeypot) {
+      console.warn('Honeypot field filled. Possible bot detected.');
+      setError({ message: 'Submission blocked due to unusual activity. Please try again.', type: 'UNKNOWN' });
+      return;
+    }
+
+    // Anti-spam: Timestamp check
+    if (Date.now() - formLoadTime.current < MIN_SUBMIT_TIME_MS) {
+      console.warn('Form submitted too quickly. Possible bot detected.');
+      setError({ message: 'Submission blocked due to unusual activity. Please try again.', type: 'UNKNOWN' });
+      return;
+    }
+
     if (!editPrompt.trim()) {
       setError({ message: 'Please enter an edit instruction.', type: 'UNKNOWN' });
       return;
@@ -65,6 +79,9 @@ const App: React.FC = () => {
     } catch (err) {
       if (err instanceof GeminiError) {
         setError({ message: err.message, type: err.type });
+        if (err.type === 'API_KEY') {
+            setIsApiKeyModalOpen(true); // Open modal on invalid key error
+        }
       } else if (err instanceof Error) {
         setError({ message: err.message, type: 'UNKNOWN' });
       } else {
@@ -73,7 +90,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [htmlCode, editPrompt]);
+  }, [htmlCode, editPrompt, honeypot, setHtmlCode]);
 
   const handleUndo = useCallback(() => {
     if (previousHtmlCode !== null) {
@@ -81,7 +98,7 @@ const App: React.FC = () => {
       setPreviousHtmlCode(null);
       setSelectedCode(null);
     }
-  }, [previousHtmlCode]);
+  }, [previousHtmlCode, setHtmlCode]);
   
   const handleReset = useCallback(() => {
     if (window.confirm('Are you sure you want to reset the code to its initial state?')) {
@@ -90,7 +107,14 @@ const App: React.FC = () => {
       setError(null);
       setSelectedCode(null);
     }
-  }, []);
+  }, [setHtmlCode]);
+  
+  const handleLoadTemplate = useCallback((templateHtml: string) => {
+    setPreviousHtmlCode(htmlCode); // Save current code to make this undoable
+    setHtmlCode(templateHtml);
+    setError(null);
+    setSelectedCode(null);
+  }, [htmlCode, setHtmlCode]);
 
   const handleToggleFullScreen = useCallback(() => {
     setIsPreviewFullScreen(prev => !prev);
@@ -105,7 +129,7 @@ const App: React.FC = () => {
         console.warn("Could not find <body> tag to update from WYSIWYG editor.");
         return currentHtml;
     });
-  }, []);
+  }, [setHtmlCode]);
 
   const toggleWysiwyg = useCallback(() => {
     setIsWysiwygEnabled(prev => {
@@ -137,54 +161,6 @@ const App: React.FC = () => {
     setSelectedCode(null);
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && isPreviewFullScreen) {
-        setIsPreviewFullScreen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isPreviewFullScreen]);
-
-  // --- Resizing Logic ---
-  const editorPaneRef = useRef<HTMLDivElement>(null);
-  const isResizing = useRef(false);
-
-  const handleResizeMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizing.current = true;
-    document.body.style.cursor = 'col-resize';
-  };
-
-  const handleResizeMouseUp = useCallback(() => {
-    isResizing.current = false;
-    document.body.style.cursor = 'default';
-  }, []);
-
-  const handleResizeMouseMove = useCallback((e: MouseEvent) => {
-    if (isResizing.current && editorPaneRef.current) {
-      const newWidth = e.clientX;
-      const minWidth = 300;
-      const maxWidth = window.innerWidth - minWidth;
-      if (newWidth > minWidth && newWidth < maxWidth) {
-        editorPaneRef.current.style.width = `${newWidth}px`;
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener('mousemove', handleResizeMouseMove);
-    window.addEventListener('mouseup', handleResizeMouseUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handleResizeMouseMove);
-      window.removeEventListener('mouseup', handleResizeMouseUp);
-    };
-  }, [handleResizeMouseMove, handleResizeMouseUp]);
-
   const previewPaneClasses = isPreviewFullScreen
     ? "fixed inset-0 z-50 bg-white dark:bg-card-bg flex flex-col"
     : "flex flex-col flex-grow bg-white dark:bg-card-bg border border-gray-200 dark:border-border-color overflow-hidden m-4 ml-0 rounded-lg";
@@ -194,16 +170,26 @@ const App: React.FC = () => {
       <header className="flex items-center justify-between p-4 bg-white dark:bg-card-bg border-b border-gray-200 dark:border-border-color shadow-md flex-shrink-0">
         <div className="flex items-center gap-3">
           <LogoIcon />
-          <h1 className="text-xl font-bold text-gray-900 dark:text-header-text">Gemini HTML Editor</h1>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-header-text">IZU's Gemini HTML Editor</h1>
         </div>
         {!isPreviewFullScreen && (
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-full text-gray-600 dark:text-light-text hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-tm-orange dark:focus:ring-offset-card-bg"
-            aria-label="Toggle theme"
-          >
-            {theme === 'light' ? <MoonIcon /> : <SunIcon />}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsApiKeyModalOpen(true)}
+              className="p-2 rounded-full text-gray-600 dark:text-light-text hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-tm-orange dark:focus:ring-offset-card-bg"
+              aria-label="Manage API Key"
+              title="Manage API Key"
+            >
+              <KeyIcon />
+            </button>
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-full text-gray-600 dark:text-light-text hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-tm-orange dark:focus:ring-offset-card-bg"
+              aria-label="Toggle theme"
+            >
+              {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+            </button>
+          </div>
         )}
       </header>
       
@@ -218,20 +204,33 @@ const App: React.FC = () => {
                 isLoading={isLoading}
                 canUndo={previousHtmlCode !== null}
                 onUndo={handleUndo}
+                honeypotValue={honeypot}
+                onHoneypotChange={setHoneypot}
               />
               {error && (
                 <div className="p-3 bg-red-100 text-red-800 border border-red-300 dark:bg-red-900/50 dark:text-red-300 dark:border-red-700 rounded-md text-sm flex justify-between items-center gap-4">
                   <span>{error.message}</span>
-                  {['NETWORK', 'UNKNOWN'].includes(error.type) && !isLoading && (
-                    <button
-                      onClick={handleSubmit}
-                      className="flex items-center gap-1.5 px-3 py-1 bg-red-200 hover:bg-red-300 text-red-900 font-semibold dark:bg-red-800/70 dark:hover:bg-red-700 dark:text-light-text rounded-md text-xs whitespace-nowrap"
-                      aria-label="Retry request"
-                    >
-                      <RetryIcon />
-                      Retry
-                    </button>
-                  )}
+                  <div className="flex gap-2">
+                    {error.type === 'RATE_LIMIT_EXCEEDED' && !isLoading && (
+                       <button
+                         onClick={() => setIsApiKeyModalOpen(true)}
+                         className="flex items-center gap-1.5 px-3 py-1 bg-red-200 hover:bg-red-300 text-red-900 font-semibold dark:bg-red-800/70 dark:hover:bg-red-700 dark:text-light-text rounded-md text-xs whitespace-nowrap"
+                         aria-label="Enter API Key"
+                       >
+                         Enter API Key
+                       </button>
+                    )}
+                    {['NETWORK', 'UNKNOWN'].includes(error.type) && !isLoading && (
+                      <button
+                        onClick={handleSubmit}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-red-200 hover:bg-red-300 text-red-900 font-semibold dark:bg-red-800/70 dark:hover:bg-red-700 dark:text-light-text rounded-md text-xs whitespace-nowrap"
+                        aria-label="Retry request"
+                      >
+                        <RetryIcon />
+                        Retry
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
               <CodeEditor 
@@ -240,6 +239,7 @@ const App: React.FC = () => {
                 onReset={handleReset}
                 selectedCode={selectedCode}
                 onClearSelection={handleClearSelection}
+                onLoadTemplate={handleLoadTemplate}
               />
             </div>
           
@@ -299,6 +299,12 @@ const App: React.FC = () => {
           />
         </div>
       </main>
+      <ApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        currentKey={apiKey}
+        onClose={() => setIsApiKeyModalOpen(false)}
+        onSave={setApiKey}
+      />
     </div>
   );
 };

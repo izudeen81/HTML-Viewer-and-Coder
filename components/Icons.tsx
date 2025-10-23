@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 
 /**
@@ -138,5 +139,25 @@ export const InspectIcon: React.FC = () => (
         <line x1="12" y1="9" x2="12" y2="3"></line>
         <line x1="21" y1="12" x2="15" y2="12"></line>
         <line x1="9" y1="12" x2="3" y2="12"></line>
+    </svg>
+);
+
+/**
+ * Renders an icon for the template selector button.
+ */
+export const TemplateIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+        <line x1="3" y1="9" x2="21" y2="9"></line>
+        <line x1="9" y1="21" x2="9" y2="9"></line>
+    </svg>
+);
+
+/**
+ * Renders an icon for the API key management button.
+ */
+export const KeyIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
     </svg>
 );
